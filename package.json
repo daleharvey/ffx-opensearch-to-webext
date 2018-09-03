@@ -1,0 +1,19 @@
+{
+  "name": "opensearch-to-webext",
+  "version": "1.0.0",
+  "description": "Convert OpenSearch XML files to Firefox WebExtensions",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^2.17.1",
+    "glob": "^7.1.3",
+    "glob-promise": "^3.4.0",
+    "rmfr": "^2.0.0",
+    "xml-to-json-promise": "0.0.3",
+    "zip-folder": "^1.0.0"
+  }
+}
