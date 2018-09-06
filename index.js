@@ -9,8 +9,10 @@ const zipFolder = require('zip-folder');
 const rimraf = require('rimraf');
 const rmfr = require('rmfr');
 const querystring = require('querystring');
+const imageDataURI = require('image-data-uri');
 
 const SEARCHPLUGINS_FOLDER = 'browser/components/search/searchplugins/';
+
 /*
  * The base manifest.json, most of this doesnt look like it will change
  * as the engine specific things are inside the
@@ -94,6 +96,7 @@ const CONFIG = {
 
   fs.mkdirSync(tmpDir);
   fs.mkdirSync(tmpDir + '_locales/');
+  fs.mkdirSync(tmpDir + 'resources/');
 
   for (const file of openSearchFiles) {
     // TODO: Check that we can always default to en
@@ -135,6 +138,7 @@ const CONFIG = {
       paramsToStr(exampleSearchFile.SearchPlugin.Url[0].Param);
   }
 
+
   // id: TODO: Check on what the right thing to do here is
   if (!manifest.applications.gecko.hasOwnProperty('id')) {
     manifest.applications.gecko.id = engine + '@mozilla.org';
@@ -147,11 +151,18 @@ const CONFIG = {
     manifest.default_locale = locales.includes('en') ? 'en' : locales[0];
   }
 
-  // TODO: WebExtensions seem to not like data uris, might need to
-  // these in the tree
-  //if (!searchProvider.hasOwnProperty('favicon_url')) {
-  //  searchProvider.favicon_url = exampleSearchFile.SearchPlugin.Image[0]._;
-  //}
+
+  if (!searchProvider.hasOwnProperty('favicon_url')) {
+    let imageUri = exampleSearchFile.SearchPlugin.Image[0]._;
+    if (imageUri.startsWith('http')) {
+      searchProvider.favicon_url = imageUri;
+    } else {
+      let path = tmpDir + 'resources/favicon';
+      let filePath = await imageDataURI.outputFile(imageUri, path);
+      // TODO: Currently we cant set favicon_url to a path, needs fixed
+      //searchProvider.favicon_url = 'resources/favicon' + filePath.substr(-4);
+    }
+  }
 
   manifest.chrome_settings_overrides = {"search_provider": searchProvider};
   writeJSON(tmpDir + 'manifest.json', manifest);

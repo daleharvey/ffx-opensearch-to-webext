@@ -12,6 +12,7 @@
     "commander": "^2.17.1",
     "glob": "^7.1.3",
     "glob-promise": "^3.4.0",
+    "image-data-uri": "^1.1.1",
     "rmfr": "^2.0.0",
     "xml-to-json-promise": "0.0.3",
     "zip-folder": "^1.0.0"
