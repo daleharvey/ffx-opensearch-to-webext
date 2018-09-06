@@ -125,17 +125,13 @@ const CONFIG = {
 
   // search_url
   if (!searchProvider.hasOwnProperty('search_url')) {
-    let url = exampleSearchFile.SearchPlugin.Url[0].$.template;
-    // WebExtensions do not allow http
-    url = url.replace('http:', 'https:');
+    let search = exampleSearchFile.SearchPlugin.Url.find(obj => {
+      return obj.$.type !== 'application/x-suggestions+json';
+    });
 
-    let params = {};
-    for (const param of exampleSearchFile.SearchPlugin.Url[0].Param) {
-      params[param.$.name] = param.$.value
+    if (search) {
+      searchProvider.search_url = createUrl(search);
     }
-
-    searchProvider.search_url = url +
-      paramsToStr(exampleSearchFile.SearchPlugin.Url[0].Param);
   }
 
 
@@ -156,11 +152,24 @@ const CONFIG = {
     let imageUri = exampleSearchFile.SearchPlugin.Image[0]._;
     if (imageUri.startsWith('http')) {
       searchProvider.favicon_url = imageUri;
-    } else {
+    } else if (imageUri.startsWith('data')) {
       let path = tmpDir + 'resources/favicon';
       let filePath = await imageDataURI.outputFile(imageUri, path);
       // TODO: Currently we cant set favicon_url to a path, needs fixed
-      //searchProvider.favicon_url = 'resources/favicon' + filePath.substr(-4);
+      searchProvider.favicon_url = 'resources/favicon' + filePath.substr(-4);
+    } else {
+      console.warn('Unsupported image type', imageUri);
+    }
+  }
+
+
+  if (!searchProvider.hasOwnProperty('suggest_url')) {
+    let suggest = exampleSearchFile.SearchPlugin.Url.find(obj => {
+      return obj.$.type === 'application/x-suggestions+json';
+    });
+
+    if (suggest) {
+      searchProvider.suggest_url = createUrl(suggest);
     }
   }
 
@@ -174,15 +183,20 @@ const CONFIG = {
   console.log('Complete! written', xpiPath);
 })();
 
-function paramsToStr(openSearchParams) {
+function paramsToStr(urlParams) {
   let params = [];
-  for (const param of openSearchParams) {
+  for (const param of urlParams) {
     params.push(param.$.name + '=' + param.$.value);
   }
   if (!params.length) {
     return '';
   }
   return '?' + params.join('&');
+}
+
+function createUrl(urlObj) {
+  return (urlObj.$.template + paramsToStr(urlObj.Param))
+    .replace('http:', 'https:');
 }
 
 async function writeJSON(path, json) {
