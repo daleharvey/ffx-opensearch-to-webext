@@ -153,15 +153,16 @@ const CONFIG = {
   }
 
 
-  if (!searchProvider.hasOwnProperty('favicon_url')) {
+  if (!manifest.hasOwnProperty('icons')) {
     let imageUri = exampleSearchFile.SearchPlugin.Image[0]._;
     if (imageUri.startsWith('http')) {
       searchProvider.favicon_url = imageUri;
     } else if (imageUri.startsWith('data')) {
-      let path = tmpDir + 'resources/favicon';
+      let path = tmpDir + 'favicon';
       let filePath = await imageDataURI.outputFile(imageUri, path);
-      // TODO: Currently we cant set favicon_url to a path, needs fixed
-      searchProvider.favicon_url = 'resources/favicon' + filePath.substr(-4);
+      manifest.icons = {
+        '16': 'favicon' + filePath.substr(-4)
+      }
     } else {
       console.warn('Unsupported image type', imageUri);
     }
