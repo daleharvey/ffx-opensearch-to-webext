@@ -125,12 +125,17 @@ const CONFIG = {
 
   // search_url
   if (!searchProvider.hasOwnProperty('search_url')) {
-    let search = exampleSearchFile.SearchPlugin.Url.find(obj => {
-      return obj.$.type !== 'application/x-suggestions+json';
-    });
 
-    if (search) {
-      searchProvider.search_url = createUrl(search);
+    let searchUrl = parseUrlObj(exampleSearchFile.SearchPlugin.Url.find(obj => {
+      return obj.$.type !== 'application/x-suggestions+json';
+    }));
+
+    searchProvider.search_url = searchUrl.url;
+    if (searchUrl.params) {
+      searchProvider.params = searchUrl.params;
+    }
+    if (searchUrl.post_params) {
+      searchProvider.search_url_post_params = searchUrl.post_params;
     }
   }
 
@@ -164,13 +169,23 @@ const CONFIG = {
 
 
   if (!searchProvider.hasOwnProperty('suggest_url')) {
-    let suggest = exampleSearchFile.SearchPlugin.Url.find(obj => {
+
+    let urlObj = exampleSearchFile.SearchPlugin.Url.find(obj => {
       return obj.$.type === 'application/x-suggestions+json';
     });
 
-    if (suggest) {
-      searchProvider.suggest_url = createUrl(suggest);
+    if (urlObj) {
+      let suggestUrl = parseUrlObj(urlObj);
+      searchProvider.suggest_url = suggestUrl.url;
+      if (suggestUrl.post_params) {
+        searchProvider.suggest_url_post_params = suggestUrl.post_params;
+      }
     }
+  }
+
+
+  if (!manifest.hasOwnProperty('encoding')) {
+    manifest.encoding = exampleSearchFile.SearchPlugin.InputEncoding[0];
   }
 
   manifest.chrome_settings_overrides = {"search_provider": searchProvider};
@@ -183,20 +198,41 @@ const CONFIG = {
   console.log('Complete! written', xpiPath);
 })();
 
-function paramsToStr(urlParams) {
-  let params = [];
-  for (const param of urlParams) {
-    params.push(param.$.name + '=' + param.$.value);
-  }
-  if (!params.length) {
-    return '';
-  }
-  return '?' + params.join('&');
-}
+function parseUrlObj(urlObj) {
 
-function createUrl(urlObj) {
-  return (urlObj.$.template + paramsToStr(urlObj.Param))
-    .replace('http:', 'https:');
+  let result = {
+    url: urlObj.$.template.replace('http:', 'https:')
+  };
+
+  if (urlObj.Param && urlObj.$.method === 'GET') {
+    let params = [];
+    for (const param of urlObj.Param) {
+      params.push(param.$.name + '=' + param.$.value);
+    }
+    let prepend = (result.url.indexOf('?') === -1) ? '?' : '';
+    result.url +=  prepend + params.join('&');
+  }
+
+  if (urlObj.Param && urlObj.$.method === 'POST') {
+    let params = [];
+    for (const param of urlObj.Param) {
+      params.push(param.$.name + '=' + param.$.value);
+    }
+    result.post_params = params.join('&');
+  }
+
+  if (urlObj.MozParam) {
+    let params = urlObj.MozParam.map(param => {
+      let obj = {};
+      obj[param.$.name] = param.$.value;
+      return obj;
+    });
+    if (params.length) {
+      result.params = params;
+    }
+  }
+
+  return result;
 }
 
 async function writeJSON(path, json) {
