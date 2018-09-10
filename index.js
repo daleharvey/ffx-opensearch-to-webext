@@ -162,7 +162,7 @@ async function parseEngine(engine, geckoPath, xpi) {
 
 
   if (!manifest.hasOwnProperty('icons')) {
-    let imageUri = searchPlugin.Image[0]._;
+    let imageUri = searchPlugin.Image[0]._.trim();
     if (imageUri.startsWith('http')) {
       searchProvider.favicon_url = imageUri;
     } else if (imageUri.startsWith('data')) {
