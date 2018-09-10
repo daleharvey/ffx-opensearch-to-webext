@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
+// Convert Firefox builtin OpenSearch xml files into WebExtensions
+//
+//  $ opensearch-to-webext --gecko-path=/Users/dharvey/src/gecko/
+//  $ opensearch-to-webext --gecko-path=/Users/dharvey/src/gecko/ --engine=allegro
+//
+// TODO:
+//  * Yandex has 2 icons, WebExtensions assumes one icon
+//
 
+const fs = require('fs-extra')
 const glob = require('glob-promise');
 const program = require('commander');
 const convert = require('xml-to-json-promise');
 const zipFolder = require('zip-folder');
 const rimraf = require('rimraf');
+const mkdirp = require('async-mkdirp');
 const rmfr = require('rmfr');
 const querystring = require('querystring');
 const imageDataURI = require('image-data-uri');
 
 const SEARCHPLUGINS_FOLDER = 'browser/components/search/searchplugins/';
+const ICON_RESOURCES = 'browser/components/search/searchplugins/images/';
 
 /*
  * The base manifest.json, most of this doesnt look like it will change
@@ -59,60 +69,58 @@ const CONFIG = {
   },
 };
 
-(async function run() {
-
-  program
-    .version('0.0.1')
-    .option('-e, --engine [engine]', 'Engine')
-    .option('--gecko-path [path]', 'Path to gecko')
-    .option('--xpi <xpi>', 'The location to write the .xpi file')
-    .parse(process.argv);
-
-  let engine = program.engine;
+async function parseEngine(engine, geckoPath, xpi) {
 
   let conf = CONFIG[engine] || {};
-  let manifest = Object.assign(MANIFEST, conf.manifest || {});
-  let searchProvider = Object.assign(SEARCH_PROVIDER, conf.search_provider || {});
+  let manifest = Object.assign(copy(MANIFEST), copy(conf.manifest));
+  let searchProvider = Object.assign(SEARCH_PROVIDER, copy(conf.search_provider));
 
   // Temporary directory where we write the WebExtension files before
   // zipping them up.
-  let tmpDir = 'tmp/';
+  let tmpDir = 'tmp/' + engine + '/';
   if (fs.existsSync(tmpDir)) {
     return console.error('Destination file', tmpDir, 'already exists');
   }
 
-  let xpiPath = program.xpi || engine + '.xpi';
+  let xpiPath = xpi || 'dist/' + engine + '.xpi';
+  await mkdirp('dist/');
 
   let locales = [];
-
-  let pathToOpenSearchFiles = program.geckoPath + SEARCHPLUGINS_FOLDER + engine + '*';
+  let pathToOpenSearchFiles = geckoPath + SEARCHPLUGINS_FOLDER + engine + '*.xml';
   let openSearchFiles = await glob(pathToOpenSearchFiles);
 
   if (!openSearchFiles.length) {
     return console.error('No files to convert found');
   }
 
-  console.log('Found', openSearchFiles.length, 'files to process');
+  console.log('Processing ' + engine + '. Found', openSearchFiles.length,
+              'files to process');
 
-  fs.mkdirSync(tmpDir);
-  fs.mkdirSync(tmpDir + '_locales/');
-  fs.mkdirSync(tmpDir + 'resources/');
+  await mkdirp(tmpDir);
+  await mkdirp(tmpDir + '_locales/');
+  await mkdirp(tmpDir + 'resources/');
 
   for (const file of openSearchFiles) {
     // TODO: Check that we can always default to en
-    let locale = file.slice(pathToOpenSearchFiles.length, -4) || 'en';
+    // TODO: This doesnt deal with some special cases well allaannonser-sv-SE.xml etc
+    let index = file.lastIndexOf('-');
+    let locale = (index != -1) ? file.slice(index + 1, -4) : 'en';
     locales.push(locale);
 
     let localeDir = tmpDir + '_locales/' + locale + '/';
-    let searchFile = await convert.xmlFileToJSON(file);
+    let fileData = fs.readFileSync(file, 'utf8');
+    let match = /<SearchPlugin|<OpenSearchDescription/.exec(fileData);
+    fileData = fileData.slice(match.index);
+    let searchFile = await convert.xmlDataToJSON(fileData);
+    let searchPlugin = searchFile.SearchPlugin || searchFile.OpenSearchDescription;
 
     let messages = Object.assign({
-      'extensionName': {'message': searchFile.SearchPlugin.ShortName[0]},
-      'extensionDescription': {'message': searchFile.SearchPlugin.Description[0]},
+      'extensionName': {'message': searchPlugin.ShortName[0]},
+      'extensionDescription': {'message': searchPlugin.Description[0]},
       'url_lang': {'message': locale},
     }, conf.messages || {});
 
-    fs.mkdirSync(localeDir);
+    await mkdirp(localeDir);
     writeJSON(localeDir + 'messages.json', messages);
   }
 
@@ -121,12 +129,12 @@ const CONFIG = {
   // all the locales, and if they are the same, use that value, if not prompt
   // the developer to construct a config value for them
   let exampleSearchFile = await convert.xmlFileToJSON(openSearchFiles[0]);
-
+  let searchPlugin = exampleSearchFile.SearchPlugin ||
+      exampleSearchFile.OpenSearchDescription;
 
   // search_url
   if (!searchProvider.hasOwnProperty('search_url')) {
-
-    let searchUrl = parseUrlObj(exampleSearchFile.SearchPlugin.Url.find(obj => {
+    let searchUrl = parseUrlObj(searchPlugin.Url.find(obj => {
       return obj.$.type !== 'application/x-suggestions+json';
     }));
 
@@ -154,15 +162,23 @@ const CONFIG = {
 
 
   if (!manifest.hasOwnProperty('icons')) {
-    let imageUri = exampleSearchFile.SearchPlugin.Image[0]._;
+    let imageUri = searchPlugin.Image[0]._;
     if (imageUri.startsWith('http')) {
       searchProvider.favicon_url = imageUri;
     } else if (imageUri.startsWith('data')) {
       let path = tmpDir + 'favicon';
-      let filePath = await imageDataURI.outputFile(imageUri, path);
-      manifest.icons = {
-        '16': 'favicon' + filePath.substr(-4)
+      try {
+        let filePath = await imageDataURI.outputFile(imageUri, path);
+        manifest.icons = {
+          '16': 'favicon' + filePath.substr(-4)
+        }
+      } catch (e) {
+        console.error('Error processing favicon', e);
       }
+    } else if (imageUri.startsWith('resource')) {
+      let path = geckoPath + ICON_RESOURCES + imageUri.split('/').pop();
+      let target = tmpDir + 'favicon' + imageUri.substr(-4);
+      await fs.copy(path, target);
     } else {
       console.warn('Unsupported image type', imageUri);
     }
@@ -170,8 +186,7 @@ const CONFIG = {
 
 
   if (!searchProvider.hasOwnProperty('suggest_url')) {
-
-    let urlObj = exampleSearchFile.SearchPlugin.Url.find(obj => {
+    let urlObj = searchPlugin.Url.find(obj => {
       return obj.$.type === 'application/x-suggestions+json';
     });
 
@@ -184,20 +199,15 @@ const CONFIG = {
     }
   }
 
+  manifest.chrome_settings_overrides = {
+    'search_provider': searchProvider
+  };
 
-  if (!manifest.hasOwnProperty('encoding')) {
-    manifest.encoding = exampleSearchFile.SearchPlugin.InputEncoding[0];
-  }
-
-  manifest.chrome_settings_overrides = {"search_provider": searchProvider};
-  writeJSON(tmpDir + 'manifest.json', manifest);
-
+  await writeJSON(tmpDir + 'manifest.json', manifest);
   await writeZip(tmpDir, xpiPath);
-  // TODO: Commenting this out for debugging
-  //await rmfr(tmpDir);
 
   console.log('Complete! written', xpiPath);
-})();
+};
 
 function parseUrlObj(urlObj) {
 
@@ -236,9 +246,16 @@ function parseUrlObj(urlObj) {
   return result;
 }
 
+function copy(obj) {
+  if (!obj) {
+    return {};
+  }
+  return JSON.parse(JSON.stringify(obj));
+}
+
 async function writeJSON(path, json) {
   var str = JSON.stringify(json, null, 2);
-  fs.writeFileSync(path, str, 'utf8');
+  return fs.writeFileSync(path, str, 'utf8');
 }
 
 async function writeZip(path, file) {
@@ -253,3 +270,25 @@ async function writeZip(path, file) {
   });
 }
 
+async function allEngines(program) {
+  let openSearchFiles = await glob(program.geckoPath + SEARCHPLUGINS_FOLDER  + '*.xml');
+  let engines = [...new Set(openSearchFiles.map(file => {
+    return file.split('/').pop().split('-')[0].replace('.xml', '');
+  }))];
+  for (var i in engines) {
+    await parseEngine(engines[i], program.geckoPath);
+  }
+}
+
+program
+  .version('0.0.1')
+  .option('-e, --engine [engine]', 'Engine')
+  .option('--gecko-path [path]', 'Path to gecko')
+  .option('--xpi <xpi>', 'The location to write the .xpi file')
+  .parse(process.argv);
+
+if (!program.engine) {
+  allEngines(program);
+} else {
+  parseEngine(program.engine, program.geckoPath, program.xpi);
+}
