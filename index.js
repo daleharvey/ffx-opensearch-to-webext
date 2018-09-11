@@ -18,7 +18,7 @@ const rimraf = require('rimraf');
 const mkdirp = require('async-mkdirp');
 const rmfr = require('rmfr');
 const querystring = require('querystring');
-const imageDataURI = require('image-data-uri');
+const dataUriToBuffer = require('data-uri-to-buffer');
 
 const SEARCHPLUGINS_FOLDER = 'browser/components/search/searchplugins/';
 const ICON_RESOURCES = 'browser/components/search/searchplugins/images/';
@@ -166,19 +166,21 @@ async function parseEngine(engine, geckoPath, xpi) {
     if (imageUri.startsWith('http')) {
       searchProvider.favicon_url = imageUri;
     } else if (imageUri.startsWith('data')) {
-      let path = tmpDir + 'favicon';
-      try {
-        let filePath = await imageDataURI.outputFile(imageUri, path);
-        manifest.icons = {
-          '16': 'favicon' + filePath.substr(-4)
-        }
-      } catch (e) {
-        console.error('Error processing favicon', e);
-      }
+      let buffer = dataUriToBuffer(imageUri);
+      let extension  = buffer.type.split('/').pop();
+      let path = tmpDir + 'favicon.' + extension;
+      await fs.writeFile(path, buffer);
+      manifest.icons = {
+        '16': 'favicon.' + extension
+      };
     } else if (imageUri.startsWith('resource')) {
       let path = geckoPath + ICON_RESOURCES + imageUri.split('/').pop();
       let target = tmpDir + 'favicon' + imageUri.substr(-4);
       await fs.copy(path, target);
+      manifest.icons = {
+        '16': 'favicon' + imageUri.substr(-4)
+      };
+
     } else {
       console.warn('Unsupported image type', imageUri);
     }
