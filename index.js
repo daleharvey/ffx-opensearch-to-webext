@@ -73,7 +73,7 @@ async function parseEngine(engine, geckoPath, xpi) {
 
   let conf = CONFIG[engine] || {};
   let manifest = Object.assign(copy(MANIFEST), copy(conf.manifest));
-  let searchProvider = Object.assign(SEARCH_PROVIDER, copy(conf.search_provider));
+  let searchProvider = Object.assign(copy(SEARCH_PROVIDER), copy(conf.search_provider));
 
   // Temporary directory where we write the WebExtension files before
   // zipping them up.
@@ -100,6 +100,9 @@ async function parseEngine(engine, geckoPath, xpi) {
   await mkdirp(tmpDir + '_locales/');
   await mkdirp(tmpDir + 'resources/');
 
+  let searchUrls = [];
+  let suggestUrls = [];
+
   for (const file of openSearchFiles) {
     // TODO: Check that we can always default to en
     // TODO: This doesnt deal with some special cases well allaannonser-sv-SE.xml etc
@@ -120,6 +123,12 @@ async function parseEngine(engine, geckoPath, xpi) {
       'url_lang': {'message': locale},
     }, conf.messages || {});
 
+    searchUrls.push(getSearchUrl(searchPlugin).url);
+    let suggestUrl = getSuggestUrl(searchPlugin);
+    if (suggestUrl) {
+      suggestUrls.push(suggestUrl.url);
+    }
+
     await mkdirp(localeDir);
     writeJSON(localeDir + 'messages.json', messages);
   }
@@ -132,11 +141,13 @@ async function parseEngine(engine, geckoPath, xpi) {
   let searchPlugin = exampleSearchFile.SearchPlugin ||
       exampleSearchFile.OpenSearchDescription;
 
-  // search_url
   if (!searchProvider.hasOwnProperty('search_url')) {
-    let searchUrl = parseUrlObj(searchPlugin.Url.find(obj => {
-      return obj.$.type !== 'application/x-suggestions+json';
-    }));
+    if ([ ...new Set(searchUrls) ].length > 1) {
+      console.warn('There are different search urls specified for different locales');
+      console.warn(searchUrls);
+    }
+
+    let searchUrl = getSearchUrl(searchPlugin);
 
     searchProvider.search_url = searchUrl.url;
     if (searchUrl.params) {
@@ -144,6 +155,22 @@ async function parseEngine(engine, geckoPath, xpi) {
     }
     if (searchUrl.post_params) {
       searchProvider.search_url_post_params = searchUrl.post_params;
+    }
+  }
+
+
+  if (!searchProvider.hasOwnProperty('suggest_url')) {
+    if ([ ...new Set(suggestUrls) ].length > 1) {
+      console.warn('There are different suggest urls specified for different locales');
+      console.warn(suggestUrls);
+    }
+
+    let suggestUrl = getSuggestUrl(searchPlugin);
+    if (suggestUrl) {
+      searchProvider.suggest_url = suggestUrl.url;
+      if (suggestUrl.post_params) {
+        searchProvider.suggest_url_post_params = suggestUrl.post_params;
+      }
     }
   }
 
@@ -187,20 +214,6 @@ async function parseEngine(engine, geckoPath, xpi) {
   }
 
 
-  if (!searchProvider.hasOwnProperty('suggest_url')) {
-    let urlObj = searchPlugin.Url.find(obj => {
-      return obj.$.type === 'application/x-suggestions+json';
-    });
-
-    if (urlObj) {
-      let suggestUrl = parseUrlObj(urlObj);
-      searchProvider.suggest_url = suggestUrl.url;
-      if (suggestUrl.post_params) {
-        searchProvider.suggest_url_post_params = suggestUrl.post_params;
-      }
-    }
-  }
-
   manifest.chrome_settings_overrides = {
     'search_provider': searchProvider
   };
@@ -211,8 +224,21 @@ async function parseEngine(engine, geckoPath, xpi) {
   console.log('Complete! written', xpiPath);
 };
 
-function parseUrlObj(urlObj) {
+function getSearchUrl(searchPlugin) {
+  return parseUrlObj(searchPlugin.Url.find(obj => {
+    return obj.$.type !== 'application/x-suggestions+json';
+  }));
+}
 
+function getSuggestUrl(searchPlugin) {
+  let obj = searchPlugin.Url.find(obj => {
+    return obj.$.type === 'application/x-suggestions+json';
+  });
+
+  return obj ? parseUrlObj(obj) : false;
+}
+
+function parseUrlObj(urlObj) {
   let result = {
     url: urlObj.$.template.replace('http:', 'https:')
   };
