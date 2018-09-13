@@ -6,8 +6,8 @@
 //  $ opensearch-to-webext --gecko-path=/Users/dharvey/src/gecko/ --engine=allegro
 //
 // TODO:
-//  * Yandex has 2 icons, WebExtensions assumes one icon
-//
+//  * Yandex has 2 icons for different locales, WebExtensions assumes one icon
+//  * google has a -2018 version which breaks our assumption about locale in filename
 
 const fs = require('fs-extra')
 const glob = require('glob-promise');
@@ -40,7 +40,8 @@ const MANIFEST = {
  * The base values for the chrome_settings_overrides.search_provider object
  */
 const SEARCH_PROVIDER = {
-  'name': '__MSG_extensionName__'
+  'name': '__MSG_extensionName__',
+  'search_url': '__MSG_searchUrl__'
 };
 
 /*
@@ -51,7 +52,6 @@ const SEARCH_PROVIDER = {
 const CONFIG = {
 
   'wikipedia': {
-    'path': 'browser/components/search/searchplugins/wikipedia*',
     'manifest': {
       'applications': {
         'gecko': {'id': 'wikipedia@mozilla.org'}
@@ -100,8 +100,7 @@ async function parseEngine(engine, geckoPath, xpi) {
   await mkdirp(tmpDir + '_locales/');
   await mkdirp(tmpDir + 'resources/');
 
-  let searchUrls = [];
-  let suggestUrls = [];
+  let hasSuggest = false;
 
   for (const file of openSearchFiles) {
     // TODO: Check that we can always default to en
@@ -121,12 +120,13 @@ async function parseEngine(engine, geckoPath, xpi) {
       'extensionName': {'message': searchPlugin.ShortName[0]},
       'extensionDescription': {'message': searchPlugin.Description[0]},
       'url_lang': {'message': locale},
-    }, conf.messages || {});
+      'searchUrl': {'message': getSearchUrl(searchPlugin).url}
+    }, copy(conf.messages));
 
-    searchUrls.push(getSearchUrl(searchPlugin).url);
     let suggestUrl = getSuggestUrl(searchPlugin);
     if (suggestUrl) {
-      suggestUrls.push(suggestUrl.url);
+      messages.suggestUrl = suggestUrl.url;
+      hasSuggest = true;
     }
 
     await mkdirp(localeDir);
@@ -141,39 +141,9 @@ async function parseEngine(engine, geckoPath, xpi) {
   let searchPlugin = exampleSearchFile.SearchPlugin ||
       exampleSearchFile.OpenSearchDescription;
 
-  if (!searchProvider.hasOwnProperty('search_url')) {
-    if ([ ...new Set(searchUrls) ].length > 1) {
-      console.warn('There are different search urls specified for different locales');
-      console.warn(searchUrls);
-    }
-
-    let searchUrl = getSearchUrl(searchPlugin);
-
-    searchProvider.search_url = searchUrl.url;
-    if (searchUrl.params) {
-      searchProvider.params = searchUrl.params;
-    }
-    if (searchUrl.post_params) {
-      searchProvider.search_url_post_params = searchUrl.post_params;
-    }
+  if (hasSuggest) {
+    searchProvider.suggest_url = '__MSG_searchUrl__';
   }
-
-
-  if (!searchProvider.hasOwnProperty('suggest_url')) {
-    if ([ ...new Set(suggestUrls) ].length > 1) {
-      console.warn('There are different suggest urls specified for different locales');
-      console.warn(suggestUrls);
-    }
-
-    let suggestUrl = getSuggestUrl(searchPlugin);
-    if (suggestUrl) {
-      searchProvider.suggest_url = suggestUrl.url;
-      if (suggestUrl.post_params) {
-        searchProvider.suggest_url_post_params = suggestUrl.post_params;
-      }
-    }
-  }
-
 
   // id: TODO: Check on what the right thing to do here is
   if (!manifest.applications.gecko.hasOwnProperty('id')) {
