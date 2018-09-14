@@ -7,7 +7,8 @@
 //
 // TODO:
 //  * Yandex has 2 icons for different locales, WebExtensions assumes one icon
-//  * google has a -2018 version which breaks our assumption about locale in filename
+//  * Breaks with google (due to google-2018)
+//  * Breaks with ? leo_ende_de
 
 const fs = require('fs-extra')
 const glob = require('glob-promise');
@@ -98,14 +99,11 @@ async function parseEngine(engine, geckoPath, xpi) {
 
   await mkdirp(tmpDir);
   await mkdirp(tmpDir + '_locales/');
-  await mkdirp(tmpDir + 'resources/');
 
   let hasSuggest = false;
 
   for (const file of openSearchFiles) {
-    // TODO: Check that we can always default to en
-    // TODO: This doesnt deal with some special cases well allaannonser-sv-SE.xml etc
-    let index = file.lastIndexOf('-');
+    let index = file.indexOf('-');
     let locale = (index != -1) ? file.slice(index + 1, -4) : 'en';
     locales.push(locale);
 
@@ -125,7 +123,7 @@ async function parseEngine(engine, geckoPath, xpi) {
 
     let suggestUrl = getSuggestUrl(searchPlugin);
     if (suggestUrl) {
-      messages.suggestUrl = suggestUrl.url;
+      messages.suggestUrl = {'message': suggestUrl.url};
       hasSuggest = true;
     }
 
@@ -145,7 +143,6 @@ async function parseEngine(engine, geckoPath, xpi) {
     searchProvider.suggest_url = '__MSG_searchUrl__';
   }
 
-  // id: TODO: Check on what the right thing to do here is
   if (!manifest.applications.gecko.hasOwnProperty('id')) {
     manifest.applications.gecko.id = engine + '@mozilla.org';
   }
@@ -164,7 +161,7 @@ async function parseEngine(engine, geckoPath, xpi) {
       searchProvider.favicon_url = imageUri;
     } else if (imageUri.startsWith('data')) {
       let buffer = dataUriToBuffer(imageUri);
-      let extension  = buffer.type.split('/').pop();
+      let extension  = typeToExtension(buffer.type);
       let path = tmpDir + 'favicon.' + extension;
       await fs.writeFile(path, buffer);
       manifest.icons = {
@@ -193,6 +190,13 @@ async function parseEngine(engine, geckoPath, xpi) {
 
   console.log('Complete! written', xpiPath);
 };
+
+function typeToExtension(type) {
+  return {
+    'image/x-icon': 'ico',
+    'image/png': 'png'
+  }[type];
+}
 
 function getSearchUrl(searchPlugin) {
   return parseUrlObj(searchPlugin.Url.find(obj => {
