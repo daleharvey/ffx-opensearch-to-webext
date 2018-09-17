@@ -7,8 +7,7 @@
 //
 // TODO:
 //  * Yandex has 2 icons for different locales, WebExtensions assumes one icon
-//  * Breaks with google (due to google-2018)
-//  * Breaks with ? leo_ende_de
+//    also WebExtensions dont seem to like the yandex icon
 
 const fs = require('fs-extra')
 const glob = require('glob-promise');
@@ -103,8 +102,16 @@ async function parseEngine(engine, geckoPath, xpi) {
   let hasSuggest = false;
 
   for (const file of openSearchFiles) {
-    let index = file.indexOf('-');
+    // files that arent in file-locale.xml format
+    let exceptions = /(google-2018|bbc-alba|yahoo-jp-auctions)/;
+    let index = exceptions.test(file) ? -1 : file.indexOf('-');
     let locale = (index != -1) ? file.slice(index + 1, -4) : 'en';
+    if (/yahoo-jp-auctions/.test(file)) {
+      locale = 'jp';
+    }
+    if (/amazondotcn/.test(file)) {
+      locale = 'cn';
+    }
     locales.push(locale);
 
     let localeDir = tmpDir + '_locales/' + locale + '/';
@@ -140,7 +147,7 @@ async function parseEngine(engine, geckoPath, xpi) {
       exampleSearchFile.OpenSearchDescription;
 
   if (hasSuggest) {
-    searchProvider.suggest_url = '__MSG_searchUrl__';
+    searchProvider.suggest_url = '__MSG_suggestUrl__';
   }
 
   if (!manifest.applications.gecko.hasOwnProperty('id')) {
@@ -217,7 +224,7 @@ function parseUrlObj(urlObj) {
     url: urlObj.$.template.replace('http:', 'https:')
   };
 
-  if (urlObj.Param && urlObj.$.method === 'GET') {
+  if (urlObj.Param && urlObj.$.method !== 'POST') {
     let params = [];
     for (const param of urlObj.Param) {
       params.push(param.$.name + '=' + param.$.value);
@@ -244,7 +251,6 @@ function parseUrlObj(urlObj) {
       result.params = params;
     }
   }
-
   return result;
 }
 
@@ -277,6 +283,11 @@ async function allEngines(program) {
   let engines = [...new Set(openSearchFiles.map(file => {
     return file.split('/').pop().split('-')[0].replace('.xml', '');
   }))];
+
+  // Gets dedupped incorrectly
+  engines.push('google-2018');
+  engines.push('yahoo-jp-auctions');
+
   for (var i in engines) {
     await parseEngine(engines[i], program.geckoPath);
   }
