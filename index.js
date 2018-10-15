@@ -69,6 +69,121 @@ const CONFIG = {
   },
 };
 
+
+// wikipedia.rm
+// https://ar.wikipedia.org (arabic, but what region?)
+// https://lij.wikipedia.org
+// https://af.wikipedia.org (africaans?)
+// https://an.wikipedia.org/wiki/Portalada AN is dutch, page looks spanish
+// https://as.wikipedia.org/wiki/%E0%A6%AC%E0%A7%87%E0%A6%9F%E0%A7%81%E0%A6%AA%E0%A6%BE%E0%A6%A4 sanskrit?
+const REGION_TABLE = {
+  'goo': 'jp-JP',
+  'si': 'si-LK',
+  'dic': 'he-IL',
+  'cl': 'es-CL',
+  'am': 'hy-AM',
+  'ee': 'et-EE',
+  'cn': 'zh-CN',
+  'br': 'pt-BR',
+  'nl': 'nl-NL',
+  'be': 'fr-BE',
+  'cz': 'cs-CZ',
+  'es': 'es-ES',
+  'uk': 'en-GB',
+  'fr': 'fr-FR',
+  'de': 'de-DE',
+  'en-GB': 'en-GB',
+  'ga-IE': 'ga-IE',
+  'fy-NL': 'fy-NL',
+  'NO': 'no-NO',
+  'en-hu': 'en-HU',
+  'sv-SE': 'sv-SE',
+  'zh-CN': 'zh-CN',
+  'zh-TW': 'zh-TW',
+  'oc': 'oc-FR',
+  'te': 'te-IN',
+  'az': 'az-AZ',
+  'by': 'be-BY',
+  'kk': 'kk-KZ',
+  'ru': 'ru-RU',
+  'tr': 'tr-TR',
+  'sk': 'sk-SK',
+  'en-US': 'en-US',
+  'en': 'en-US',
+  'pl': 'pl-PL',
+  'au': 'en-AU',
+  'ca': 'en-CA',
+  'france': 'fr-FR',
+  'in': 'in-IN',
+  'it': 'it-IT',
+  'jp': 'jp-JP',
+  'ja': 'jp-JP',
+  'ua': 'uk-UA',
+  'mx': 'es-MX',
+  'fi': 'fi-FI',
+  'tlfi-fr': 'fr-FR',
+  'kr': 'ko-KR',
+  'alla': 'es-ES',
+  'enlv': 'lv-LV',
+  'at': 'de-AT',
+  'ch': 'de-CH',
+  'ie': 'en-IE',
+  'beag': 'gd-GB',
+  'is': 'is-IS',
+  'vortaro': 'de-DE'
+};
+
+
+function mozBuild(name, icon, localeArray) {
+  // The new Set stuff deduplicates
+  let locales = [...new Set(localeArray)].map(locale => {
+    return `FINAL_TARGET_FILES.search['${name}@mozilla.org']._locales['${locale}'] += [
+  'locales/${locale}/messages.json'
+]
+
+`;
+  }).join('');
+
+  return `# -*- Mode: python; indent-tabs-mode: nil; tab-width: 40 -*-
+# vim: set filetype=python:
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+FINAL_TARGET_FILES.search['${name}@mozilla.org'] += [
+  '${icon}',
+  'manifest.json'
+]
+
+${locales}
+`;
+}
+
+function normaliseLocale(file) {
+  // files that arent in file-locale.xml format
+  let exceptions = /(google-2018|bbc-alba|yahoo-jp-auctions)/;
+  let index = exceptions.test(file) ? -1 : file.indexOf('-');
+
+  // Default to en-US
+  let locale = (index != -1) ? file.slice(index + 1, -4) : 'en-US';
+
+
+  if (/yahoo-jp-auctions/.test(file)) {
+    locale = 'jp';
+  }
+  if (/amazondotcn/.test(file)) {
+    locale = 'cn';
+  }
+
+
+  if (locale in REGION_TABLE) {
+    return REGION_TABLE[locale];
+  }
+
+  console.log('! Unrecognised locale', locale);
+  return 'en-US';
+}
+
 async function parseEngine(engine, geckoPath, xpi) {
 
   let conf = CONFIG[engine] || {};
@@ -97,24 +212,15 @@ async function parseEngine(engine, geckoPath, xpi) {
               'files to process');
 
   await mkdirp(tmpDir);
-  await mkdirp(tmpDir + '_locales/');
+  await mkdirp(tmpDir + 'locales/');
 
   let hasSuggest = false;
 
   for (const file of openSearchFiles) {
-    // files that arent in file-locale.xml format
-    let exceptions = /(google-2018|bbc-alba|yahoo-jp-auctions)/;
-    let index = exceptions.test(file) ? -1 : file.indexOf('-');
-    let locale = (index != -1) ? file.slice(index + 1, -4) : 'en';
-    if (/yahoo-jp-auctions/.test(file)) {
-      locale = 'jp';
-    }
-    if (/amazondotcn/.test(file)) {
-      locale = 'cn';
-    }
+    let locale = normaliseLocale(file);
     locales.push(locale);
 
-    let localeDir = tmpDir + '_locales/' + locale + '/';
+    let localeDir = tmpDir + 'locales/' + locale + '/';
     let fileData = fs.readFileSync(file, 'utf8');
     let match = /<SearchPlugin|<OpenSearchDescription/.exec(fileData);
     fileData = fileData.slice(match.index);
@@ -158,7 +264,7 @@ async function parseEngine(engine, geckoPath, xpi) {
   // default_locale: If there is no default locale set in the manifest file
   // default to 'en' if available, otherwise just pick the first
   if (!manifest.hasOwnProperty('default_locale')) {
-    manifest.default_locale = locales.includes('en') ? 'en' : locales[0];
+    manifest.default_locale = locales.includes('en-US') ? 'en-US' : locales[0];
   }
 
 
@@ -191,6 +297,10 @@ async function parseEngine(engine, geckoPath, xpi) {
   manifest.chrome_settings_overrides = {
     'search_provider': searchProvider
   };
+
+
+  let mozBuildStr = mozBuild(engine, manifest.icons['16'], locales);
+  fs.writeFileSync(tmpDir + 'moz.build', mozBuildStr, 'utf8')
 
   await writeJSON(tmpDir + 'manifest.json', manifest);
   await writeZip(tmpDir, xpiPath);
@@ -291,6 +401,8 @@ async function allEngines(program) {
   for (var i in engines) {
     await parseEngine(engines[i], program.geckoPath);
   }
+
+  //console.log(engines.map(engine => { return "    '"+engine+"',";}).join('\n'))
 }
 
 program
