@@ -50,87 +50,19 @@ const SEARCH_PROVIDER = {
  * fields will override the above definitions
  */
 const CONFIG = {
-
   'wikipedia': {
-    'manifest': {
-      'applications': {
-        'gecko': {'id': 'wikipedia@mozilla.org'}
-      }
-    },
     'search_provider': {
       'keyword': 'wp',
-      'favicon_url': 'https://__MSG_url_lang__.wikipedia.org/static/favicon/wikipedia.ico',
-      'search_url': 'https://__MSG_url_lang__.wikipedia.org/wiki/__MSG_url_landing__?sourceid=Mozilla-search&search={searchTerms}&lang={language}&oe={outputEncoding}&ml={moz:locale}&mdi={moz:distributionID}&mo={moz:official}',
-      'suggest_url': 'https://__MSG_url_lang__.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}'
     },
     'messages': {
       'url_landing': {'message': 'Special:Search'}
     }
   },
-};
-
-
-// wikipedia.rm
-// https://ar.wikipedia.org (arabic, but what region?)
-// https://lij.wikipedia.org
-// https://af.wikipedia.org (africaans?)
-// https://an.wikipedia.org/wiki/Portalada AN is dutch, page looks spanish
-// https://as.wikipedia.org/wiki/%E0%A6%AC%E0%A7%87%E0%A6%9F%E0%A7%81%E0%A6%AA%E0%A6%BE%E0%A6%A4 sanskrit?
-const REGION_TABLE = {
-  'goo': 'jp-JP',
-  'si': 'si-LK',
-  'dic': 'he-IL',
-  'cl': 'es-CL',
-  'am': 'hy-AM',
-  'ee': 'et-EE',
-  'cn': 'zh-CN',
-  'br': 'pt-BR',
-  'nl': 'nl-NL',
-  'be': 'fr-BE',
-  'cz': 'cs-CZ',
-  'es': 'es-ES',
-  'uk': 'en-GB',
-  'fr': 'fr-FR',
-  'de': 'de-DE',
-  'en-GB': 'en-GB',
-  'ga-IE': 'ga-IE',
-  'fy-NL': 'fy-NL',
-  'NO': 'no-NO',
-  'en-hu': 'en-HU',
-  'sv-SE': 'sv-SE',
-  'zh-CN': 'zh-CN',
-  'zh-TW': 'zh-TW',
-  'oc': 'oc-FR',
-  'te': 'te-IN',
-  'az': 'az-AZ',
-  'by': 'be-BY',
-  'kk': 'kk-KZ',
-  'ru': 'ru-RU',
-  'tr': 'tr-TR',
-  'sk': 'sk-SK',
-  'en-US': 'en-US',
-  'en': 'en-US',
-  'pl': 'pl-PL',
-  'au': 'en-AU',
-  'ca': 'en-CA',
-  'france': 'fr-FR',
-  'in': 'in-IN',
-  'it': 'it-IT',
-  'jp': 'jp-JP',
-  'ja': 'jp-JP',
-  'ua': 'uk-UA',
-  'mx': 'es-MX',
-  'fi': 'fi-FI',
-  'tlfi-fr': 'fr-FR',
-  'kr': 'ko-KR',
-  'alla': 'es-ES',
-  'enlv': 'lv-LV',
-  'at': 'de-AT',
-  'ch': 'de-CH',
-  'ie': 'en-IE',
-  'beag': 'gd-GB',
-  'is': 'is-IS',
-  'vortaro': 'de-DE'
+  'amazondotcom': {
+    'search_provider': {
+      'suggest_url': 'https://completion.amazon.com/search/complete?q={searchTerms}&amp;search-alias=aps&amp;mkt=1'
+    }
+  }
 };
 
 
@@ -138,7 +70,7 @@ function mozBuild(name, icon, localeArray) {
   // The new Set stuff deduplicates
   let locales = [...new Set(localeArray)].map(locale => {
     return `FINAL_TARGET_FILES.search['${name}@mozilla.org']._locales['${locale}'] += [
-  'locales/${locale}/messages.json'
+  '_locales/${locale}/messages.json'
 ]
 
 `;
@@ -159,29 +91,43 @@ ${locales}
 `;
 }
 
+const VALID_LOCALES = [
+  'jp', 'sk', 'tr', 'ru', 'kk', 'en', 'by', 'az', 'pl', 'oc', 'te',
+  'zh_TW', 'zh_CN', 'wo', 'vi', 'uz', 'ur', 'uk', 'tl', 'th', 'ta',
+  'sv_SE', 'sr', 'sq', 'sl', 'si', 'ro', 'en_US', 'rm', 'pt', 'pa',
+  'or', 'NO', 'NN', 'nl', 'ne', 'my', 'ms', 'mr', 'ml', 'mk', 'lv',
+  'ltg', 'lt', 'lo', 'lij', 'kr', 'af', 'an', 'ar', 'as', 'ast', 'be_tarask',
+  'be', 'bg', 'bn', 'br', 'bs', 'ca', 'crh', 'cy', 'cz', 'da', 'de',
+  'dsb', 'el', 'eo', 'es', 'et', 'eu', 'fa', 'fi', 'fr', 'fy_NL', 'ga_IE',
+  'gd', 'gl', 'gn', 'gu', 'he', 'hi', 'hr', 'hsb', 'hu', 'hy', 'ia', 'id',
+  'is', 'it', 'ja', 'ka', 'kab', 'km', 'kn', 'au', 'en_GB','in', 'mx', 'en_hu',
+  'eo', 'ee', 'at', 'ch', 'ie', 'cn'
+];
+
+const LOCALE_OVERRIDES = {
+  'cnrtl-tlfi-fr.xml': 'fr',
+  'google-2018.xml': 'en_US',
+  'amazondotcn.xml': 'cn',
+  'amazon-france.xml': 'fr',
+  'oshiete-goo.xml': 'jp',
+  'reta-vortaro.xml': 'eo',
+  'yahoo-jp-auctions.xml': 'jp',
+  'wikipedia.xml': 'en'
+};
+
 function normaliseLocale(file) {
-  // files that arent in file-locale.xml format
-  let exceptions = /(google-2018|bbc-alba|yahoo-jp-auctions)/;
-  let index = exceptions.test(file) ? -1 : file.indexOf('-');
+  let filename = file.split('/').pop();
+  let locale = file.slice(file.indexOf('-') + 1, -4).replace('-', '_');
 
-  // Default to en-US
-  let locale = (index != -1) ? file.slice(index + 1, -4) : 'en-US';
-
-
-  if (/yahoo-jp-auctions/.test(file)) {
-    locale = 'jp';
-  }
-  if (/amazondotcn/.test(file)) {
-    locale = 'cn';
+  if (filename in LOCALE_OVERRIDES) {
+    locale = LOCALE_OVERRIDES[filename];
   }
 
-
-  if (locale in REGION_TABLE) {
-    return REGION_TABLE[locale];
+  if (!VALID_LOCALES.includes(locale)) {
+    return 'en';
   }
 
-  console.log('! Unrecognised locale', locale);
-  return 'en-US';
+  return locale;
 }
 
 async function parseEngine(engine, geckoPath, xpi) {
@@ -212,7 +158,7 @@ async function parseEngine(engine, geckoPath, xpi) {
               'files to process');
 
   await mkdirp(tmpDir);
-  await mkdirp(tmpDir + 'locales/');
+  await mkdirp(tmpDir + '_locales/');
 
   let hasSuggest = false;
 
@@ -220,7 +166,7 @@ async function parseEngine(engine, geckoPath, xpi) {
     let locale = normaliseLocale(file);
     locales.push(locale);
 
-    let localeDir = tmpDir + 'locales/' + locale + '/';
+    let localeDir = tmpDir + '_locales/' + locale + '/';
     let fileData = fs.readFileSync(file, 'utf8');
     let match = /<SearchPlugin|<OpenSearchDescription/.exec(fileData);
     fileData = fileData.slice(match.index);
@@ -252,7 +198,7 @@ async function parseEngine(engine, geckoPath, xpi) {
   let searchPlugin = exampleSearchFile.SearchPlugin ||
       exampleSearchFile.OpenSearchDescription;
 
-  if (hasSuggest) {
+  if (hasSuggest && !('suggest_url' in searchProvider)) {
     searchProvider.suggest_url = '__MSG_suggestUrl__';
   }
 
@@ -264,7 +210,7 @@ async function parseEngine(engine, geckoPath, xpi) {
   // default_locale: If there is no default locale set in the manifest file
   // default to 'en' if available, otherwise just pick the first
   if (!manifest.hasOwnProperty('default_locale')) {
-    manifest.default_locale = locales.includes('en-US') ? 'en-US' : locales[0];
+    manifest.default_locale = locales.includes('en') ? 'en' : locales[0];
   }
 
 
@@ -395,7 +341,7 @@ async function allEngines(program) {
   }))];
 
   // Gets dedupped incorrectly
-  engines.push('google-2018');
+  //engines.push('google-2018');
   engines.push('yahoo-jp-auctions');
 
   for (var i in engines) {
