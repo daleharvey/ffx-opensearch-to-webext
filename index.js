@@ -50,6 +50,13 @@ const SEARCH_PROVIDER = {
  * fields will override the above definitions
  */
 const CONFIG = {
+  'yandex': {
+    'manifest': {
+      'icons': {
+        '16': '__MSG_extensionIcon__'
+      }
+    }
+  },
   'wikipedia': {
     'search_provider': {
       'keyword': 'wp',
@@ -101,10 +108,14 @@ const VALID_LOCALES = [
   'dsb', 'el', 'eo', 'es', 'et', 'eu', 'fa', 'fi', 'fr', 'fy_NL', 'ga_IE',
   'gd', 'gl', 'gn', 'gu', 'he', 'hi', 'hr', 'hsb', 'hu', 'hy', 'ia', 'id',
   'is', 'it', 'ja', 'ka', 'kab', 'km', 'kn', 'au', 'en_GB','in', 'mx', 'en_hu',
-  'eo', 'ee', 'at', 'ch', 'ie', 'cn'
+  'eo', 'ee', 'at', 'ch', 'ie', 'cn', 'gd_GB'
 ];
 
 const LOCALE_OVERRIDES = {
+  'bbc-alba.xml': 'gd_GB',
+  'baidu.xml': 'cn',
+  'azerdict.xml': 'az',
+  'amazondotcom.xml': 'en_US',
   'cnrtl-tlfi-fr.xml': 'fr',
   'google-2018.xml': 'en_US',
   'amazondotcn.xml': 'cn',
@@ -161,6 +172,7 @@ async function parseEngine(engine, geckoPath, xpi) {
   await mkdirp(tmpDir + '_locales/');
 
   let hasSuggest = false;
+  let icons = [];
 
   for (const file of openSearchFiles) {
     let locale = normaliseLocale(file);
@@ -184,6 +196,10 @@ async function parseEngine(engine, geckoPath, xpi) {
     if (suggestUrl) {
       messages.suggestUrl = {'message': suggestUrl.url};
       hasSuggest = true;
+    }
+
+    if (engine === 'yandex') {
+      messages.extensionIcon = {'message': searchPlugin.Image[0]._};
     }
 
     await mkdirp(localeDir);
@@ -213,7 +229,6 @@ async function parseEngine(engine, geckoPath, xpi) {
     manifest.default_locale = locales.includes('en') ? 'en' : locales[0];
   }
 
-
   if (!manifest.hasOwnProperty('icons')) {
     let imageUri = searchPlugin.Image[0]._.trim();
     if (imageUri.startsWith('http')) {
@@ -239,14 +254,13 @@ async function parseEngine(engine, geckoPath, xpi) {
     }
   }
 
-
   manifest.chrome_settings_overrides = {
     'search_provider': searchProvider
   };
 
 
-  let mozBuildStr = mozBuild(engine, manifest.icons['16'], locales);
-  fs.writeFileSync(tmpDir + 'moz.build', mozBuildStr, 'utf8')
+  //let mozBuildStr = mozBuild(engine, manifest.icons['16'], locales);
+  //fs.writeFileSync(tmpDir + 'moz.build', mozBuildStr, 'utf8')
 
   await writeJSON(tmpDir + 'manifest.json', manifest);
   await writeZip(tmpDir, xpiPath);
@@ -255,10 +269,19 @@ async function parseEngine(engine, geckoPath, xpi) {
 };
 
 function typeToExtension(type) {
-  return {
+  let extensions = {
+    'image/ico': 'ico',
+    'image/icon': 'ico',
+    'image/x-ico': 'ico',
     'image/x-icon': 'ico',
-    'image/png': 'png'
-  }[type];
+    'image/png': 'png',
+    'image/gif': 'gif',
+  };
+  if (type in extensions) {
+    return extensions[type];
+  }
+  throw `Cant find ${type}`;
+
 }
 
 function getSearchUrl(searchPlugin) {
@@ -341,7 +364,7 @@ async function allEngines(program) {
   }))];
 
   // Gets dedupped incorrectly
-  //engines.push('google-2018');
+  engines.push('google-2018');
   engines.push('yahoo-jp-auctions');
 
   for (var i in engines) {
