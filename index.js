@@ -5,9 +5,6 @@
 //  $ opensearch-to-webext --gecko-path=/Users/dharvey/src/gecko/
 //  $ opensearch-to-webext --gecko-path=/Users/dharvey/src/gecko/ --engine=allegro
 //
-// TODO:
-//  * Yandex has 2 icons for different locales, WebExtensions assumes one icon
-//    also WebExtensions dont seem to like the yandex icon
 
 const fs = require('fs-extra')
 const glob = require('glob-promise');
@@ -57,46 +54,8 @@ const CONFIG = {
       }
     }
   },
-  'wikipedia': {
-    'search_provider': {
-      'keyword': 'wp',
-    },
-    'messages': {
-      'url_landing': {'message': 'Special:Search'}
-    }
-  },
-  'amazondotcom': {
-    'search_provider': {
-      'suggest_url': 'https://completion.amazon.com/search/complete?q={searchTerms}&amp;search-alias=aps&amp;mkt=1'
-    }
-  }
 };
 
-
-function mozBuild(name, icon, localeArray) {
-  // The new Set stuff deduplicates
-  let locales = [...new Set(localeArray)].map(locale => {
-    return `FINAL_TARGET_FILES.search['${name}@mozilla.org']._locales['${locale}'] += [
-  '_locales/${locale}/messages.json'
-]
-
-`;
-  }).join('');
-
-  return `# -*- Mode: python; indent-tabs-mode: nil; tab-width: 40 -*-
-# vim: set filetype=python:
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
-
-FINAL_TARGET_FILES.search['${name}@mozilla.org'] += [
-  '${icon}',
-  'manifest.json'
-]
-
-${locales}
-`;
-}
 
 const VALID_LOCALES = [
   'jp', 'sk', 'tr', 'ru', 'kk', 'en', 'by', 'az', 'pl', 'oc', 'te',
@@ -219,7 +178,7 @@ async function parseEngine(engine, geckoPath, xpi) {
   }
 
   if (!manifest.applications.gecko.hasOwnProperty('id')) {
-    manifest.applications.gecko.id = engine + '@mozilla.org';
+    manifest.applications.gecko.id = engine + '@search.mozilla.org';
   }
 
 
@@ -258,9 +217,6 @@ async function parseEngine(engine, geckoPath, xpi) {
     'search_provider': searchProvider
   };
 
-
-  //let mozBuildStr = mozBuild(engine, manifest.icons['16'], locales);
-  //fs.writeFileSync(tmpDir + 'moz.build', mozBuildStr, 'utf8')
 
   await writeJSON(tmpDir + 'manifest.json', manifest);
   await writeZip(tmpDir, xpiPath);
@@ -360,12 +316,20 @@ async function writeZip(path, file) {
 async function allEngines(program) {
   let openSearchFiles = await glob(program.geckoPath + SEARCHPLUGINS_FOLDER  + '*.xml');
   let engines = [...new Set(openSearchFiles.map(file => {
-    return file.split('/').pop().split('-')[0].replace('.xml', '');
+    // 1 extension per locale
+    return file.split('/').pop().replace('.xml', '');
+    // 1 extension for many locales
+    //return file.split('/').pop().split('-')[0].replace('.xml', '');
   }))];
 
   // Gets dedupped incorrectly
-  engines.push('google-2018');
-  engines.push('yahoo-jp-auctions');
+  // engines.push('google-b-1-d');
+  // engines.push('google-b-1-e');
+  // engines.push('google-b-d');
+  // engines.push('google-b-e');
+  // engines.push('google-2018');
+  // engines.push('yahoo-jp-auctions');
+  // engines.push('amazon-france');
 
   for (var i in engines) {
     await parseEngine(engines[i], program.geckoPath);
