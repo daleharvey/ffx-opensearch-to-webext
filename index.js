@@ -17,8 +17,8 @@ const rmfr = require('rmfr');
 const querystring = require('querystring');
 const dataUriToBuffer = require('data-uri-to-buffer');
 
-const SEARCHPLUGINS_FOLDER = 'browser/components/search/searchplugins/';
-const ICON_RESOURCES = 'browser/components/search/searchplugins/images/';
+const SEARCHPLUGINS_FOLDER = 'mail/components/search/searchplugins/';
+const ICON_RESOURCES = 'mail/components/search/searchplugins/images/';
 
 const MULTILOCALE = true;
 
@@ -53,12 +53,10 @@ const CONFIG = {
 
 function normaliseLocale(file) {
   let filename = file.split('/').pop();
-  if (file.indexOf('-') === -1) {
-    console.log(file);
-    //throw '';
+  if (filename.indexOf('-') === -1) {
     return 'en';
   }
-  let locale = file.slice(file.indexOf('-') + 1, -4);
+  let locale = filename.slice(filename.indexOf('-') + 1, -4);
   return locale;
 }
 
@@ -72,7 +70,7 @@ function paramsToStr(obj) {
 
 function getSearchForm(searchPlugin) {
   if (searchPlugin.SearchForm) {
-    return searchPlugin.SearchForm[0].replace('http:', 'https:');
+    return searchPlugin.SearchForm[0];
   }
 
   let obj = searchPlugin.Url.find(obj => {
@@ -83,7 +81,7 @@ function getSearchForm(searchPlugin) {
 
   let url = parseUrlObj(obj);
 
-  let actualUrl = url.url.replace('http:', 'https:');
+  let actualUrl = url.url;
   if (url.params) {
     let prepend = (actualUrl.indexOf('?') === -1) ? '?' : '';
     actualUrl += prepend + paramsToStr(url.params);
@@ -233,7 +231,6 @@ async function parseEngine(engine, geckoPath, xpi) {
   for (const file of openSearchFiles) {
     let locale = normaliseLocale(file);
     locales.push(locale);
-
     let localeDir = tmpDir + '_locales/' + locale + '/';
     let fileData = fs.readFileSync(file, 'utf8');
     let match = /<SearchPlugin|<OpenSearchDescription/.exec(fileData);
@@ -456,7 +453,7 @@ function getSuggestUrl(searchPlugin) {
 function parseUrlObj(urlObj) {
 
   let result = {
-    url: urlObj.$.template.replace('http:', 'https:')
+    url: urlObj.$.template
   };
 
   let params = [];
